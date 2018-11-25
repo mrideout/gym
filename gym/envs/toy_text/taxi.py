@@ -3,16 +3,9 @@ from six import StringIO
 from gym import utils
 from gym.envs.toy_text import discrete
 import numpy as np
+import os
 
-MAP = [
-    "+---------+",
-    "|R: | : :G|",
-    "| : : : : |",
-    "| : : : : |",
-    "| | : | : |",
-    "|Y| : |B: |",
-    "+---------+",
-]
+nL = int(os.environ["NUM_STOPS"])
 
 class TaxiEnv(discrete.DiscreteEnv):
     """
@@ -21,10 +14,20 @@ class TaxiEnv(discrete.DiscreteEnv):
     by Tom Dietterich
 
     Description:
-    There are four designated locations in the grid world indicated by R(ed), B(lue), G(reen), and Y(ellow). When the episode starts, the taxi starts off at a random square and the passenger is at a random location. The taxi drive to the passenger's location, pick up the passenger, drive to the passenger's destination (another one of the four specified locations), and then drop off the passenger. Once the passenger is dropped off, the episode ends.
+    There are nL designated locations in the grid world indicated by the first nL members of the set: A, B, C, D, E, F, G, H
+    When the episode starts, the taxi starts off at a random square and the passenger is at a random location. The taxi drives to the passenger's location, picks up the passenger, drives to the passenger's destination (another one of the nL specified locations), and then drops off the passenger. Once the passenger is dropped off, the episode ends.
 
-    Observations: 
-    There are 500 discrete states since there are 25 taxi positions, 5 possible locations of the passenger (including the case when the passenger is the taxi), and 4 destination locations. 
+    State counts:
+    if nL == 2:
+        There are 125 discrete states since there are 25 taxi positions, 3 possible locations of the passenger, and 2 destination locations.
+    if nL == 4:
+        There are 500 discrete states since there are 25 taxi positions, 5 possible locations of the passenger, and 4 destination locations.
+    if nL == 5:
+        There are 750 discrete states since there are 25 taxi positions, 6 possible locations of the passenger, and 24 destination locations.
+    if nL == 6:
+        There are 1050 discrete states since there are 25 taxi positions, 7 possible locations of the passenger, and 6 destination locations.
+    if nL == 8:
+        There are 1800 discrete states since there are 25 taxi positions, 9 possible locations of the passenger, and 8 destination locations.
     
     Actions: 
     There are 6 discrete deterministic actions:
@@ -50,24 +53,84 @@ class TaxiEnv(discrete.DiscreteEnv):
     metadata = {'render.modes': ['human', 'ansi']}
 
     def __init__(self):
+
+        if nL == 2:
+            MAP = [
+                "+---------+",
+                "|A: | : : |",
+                "| : : : : |",
+                "| : : : : |",
+                "| | : | : |",
+                "| | : |B: |",
+                "+---------+",
+            ]
+            self.locs = locs = [(0,0), (4,3)]
+        elif nL == 4:
+            MAP = [
+                "+---------+",
+                "|A: | : :B|",
+                "| : : : : |",
+                "| : : : : |",
+                "| | : | : |",
+                "|C| : |D: |",
+                "+---------+",
+            ]
+            self.locs = locs = [(0,0), (0,4), (4,0), (4,3)]
+        elif nL == 5:
+            MAP = [
+                "+---------+",
+                "|A: | : :B|",
+                "| : : : : |",
+                "| : : : :C|",
+                "| | : | : |",
+                "|D| : |E: |",
+                "+---------+",
+            ]
+            self.locs = locs = [(0,0), (0,4), (2,4), (4,0), (4,3)]
+        elif nL == 6:
+            MAP = [
+                "+---------+",
+                "|A: | : :B|",
+                "| : : : : |",
+                "| :C:D: : |",
+                "| | : | : |",
+                "|E| : |F: |",
+                "+---------+",
+            ]
+            self.locs = locs = [(0,0), (0,4), (2,1), (2,2), (4,0), (4,3)]
+        elif nL == 8:
+            MAP = [
+                "+---------+",
+                "|A: |B: :C|",
+                "| :D: : : |",
+                "| : : :E:F|",
+                "| | : | : |",
+                "|G| : |H: |",
+                "+---------+",
+            ]
+            self.locs = locs = [(0,0), (0,2), (1,1), (2,3), (2,4), (0,4), (4,0), (4,3)]
+
+
         self.desc = np.asarray(MAP,dtype='c')
 
-        self.locs = locs = [(0,0), (0,4), (4,0), (4,3)]
-
-        nS = 500
-        nR = 5
-        nC = 5
+        nR = 5 # rows
+        nC = 5 # columns
+        # states
+        if nL == 2:
+            nS = nR * nC * nL * (nL+1) * 2
+        else:
+            nS = nR * nC * nL * (nL+1)
         maxR = nR-1
         maxC = nC-1
         isd = np.zeros(nS)
-        nA = 6
+        nA = 6 # actions
         P = {s : {a : [] for a in range(nA)} for s in range(nS)}
         for row in range(5):
             for col in range(5):
-                for passidx in range(5):
-                    for destidx in range(4):
+                for passidx in range(nL+1):
+                    for destidx in range(nL):
                         state = self.encode(row, col, passidx, destidx)
-                        if passidx < 4 and passidx != destidx:
+                        if passidx < nL and passidx != destidx:
                             isd[state] += 1
                         for a in range(nA):
                             # defaults
@@ -85,20 +148,20 @@ class TaxiEnv(discrete.DiscreteEnv):
                             elif a==3 and self.desc[1+row,2*col]==b":":
                                 newcol = max(col-1, 0)
                             elif a==4: # pickup
-                                if (passidx < 4 and taxiloc == locs[passidx]):
-                                    newpassidx = 4
+                                if (passidx < nL and taxiloc == locs[passidx]):
+                                    newpassidx = nL
                                 else:
                                     reward = -10
                             elif a==5: # dropoff
-                                if (taxiloc == locs[destidx]) and passidx==4:
-                                    newpassidx = destidx
+                                if (taxiloc == locs[destidx]) and passidx==nL:
                                     done = True
                                     reward = 20
-                                elif (taxiloc in locs) and passidx==4:
+                                elif (taxiloc in locs) and passidx==nL:
                                     newpassidx = locs.index(taxiloc)
                                 else:
                                     reward = -10
                             newstate = self.encode(newrow, newcol, newpassidx, destidx)
+                            #print("row:", row, "col:", col, "passidx:", passidx, "destidx:", destidx, "a:", a)
                             P[state][a].append((1.0, newstate, reward, done))
         isd /= isd.sum()
         discrete.DiscreteEnv.__init__(self, nS, nA, P, isd)
@@ -110,14 +173,14 @@ class TaxiEnv(discrete.DiscreteEnv):
         i += taxicol
         i *= 5
         i += passloc
-        i *= 4
+        i *= nL
         i += destidx
         return i
 
     def decode(self, i):
         out = []
-        out.append(i % 4)
-        i = i // 4
+        out.append(i % nL)
+        i = i // nL
         out.append(i % 5)
         i = i // 5
         out.append(i % 5)
@@ -133,7 +196,7 @@ class TaxiEnv(discrete.DiscreteEnv):
         out = [[c.decode('utf-8') for c in line] for line in out]
         taxirow, taxicol, passidx, destidx = self.decode(self.s)
         def ul(x): return "_" if x == " " else x
-        if passidx < 4:
+        if passidx < nL:
             out[1+taxirow][2*taxicol+1] = utils.colorize(out[1+taxirow][2*taxicol+1], 'yellow', highlight=True)
             pi, pj = self.locs[passidx]
             out[1+pi][2*pj+1] = utils.colorize(out[1+pi][2*pj+1], 'blue', bold=True)
